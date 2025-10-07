@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Chirp3-HD-Kore" language="en-US">
+    Starting test call. Please wait.
+  </Say>
+  <Pause length="10"/>
+  <Say voice="Google.en-US-Chirp3-HD-Kore" language="en-US">
+    Hey Patrick — this is a Twilio system test call, just checking your setup.
+    Peter Piper picked a peck of pickled peppers... and deployed them to production.
+    If you're hearing this, everything’s running smoothly.
+  </Say>
+</Response>
