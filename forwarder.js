@@ -3,7 +3,7 @@
 
 exports.handler = async function(context, event, callback) {
     // Create a new TwiML response object to build our instructions
-    const twiml = new Twilio.Response();
+    const twiml = new Twilio.twiml.VoiceResponse();
     
     // Get the phone numbers passed from the Studio Flow
     const calledNumber = event.calledNumber; // The Twilio number that was called
