@@ -5,29 +5,31 @@
  * - Sends an SMS with a link to the voicemail recording.
  */
 exports.handler = async function(context, event, callback) {
-    // The Twilio number that originally received the call
-    const fromNumber = event.To; 
-    
-    // The office's phone number, passed through from the previous functions
-    const toNumber = event.smsTarget;
-    
-    // The URL of the new voice recording
-    const recordingUrl = event.RecordingUrl;
-    
-    // The customer's phone number
-    const callerNumber = event.CallFrom;
-    
-    const client = context.getTwilioClient();
-  
-    const messageBody = `New Voicemail! You have a new message from ${callerNumber}. Listen here: ${recordingUrl}`;
-  
-    // Use the Twilio client to send the SMS
-    await client.messages.create({
+  console.log("Send SMS function started.");
+  console.log("Received event from recording callback:", JSON.stringify(event, null, 2));
+
+  const fromNumber = event.To; 
+  const toNumber = event.smsTarget;
+  const recordingUrl = event.RecordingUrl;
+  const callerNumber = event.CallFrom;
+  const client = context.getTwilioClient();
+
+  console.log(`Extracted variables - From: ${fromNumber}, To: ${toNumber}, Caller: ${callerNumber}`);
+
+  const messageBody = `New GJ GARDNER HOMES Voicemail! You have a new message from ${callerNumber}. Listen here: ${recordingUrl}`;
+
+  console.log(`Constructed SMS body: "${messageBody}"`);
+
+  try {
+    const message = await client.messages.create({
       to: toNumber,
       from: fromNumber,
       body: messageBody
     });
-    
-    // Respond to the webhook to confirm success
-    return callback(null, { status: "success" });
-  };
+    console.log(`SMS successfully created with SID: ${message.sid}`);
+  } catch (error) {
+    console.error(`Failed to send SMS: ${error}`);
+  }
+  
+  return callback(null, { status: "success" });
+};
