@@ -1,22 +1,21 @@
 # Twilio Scalable Office Call Forwarding
 
-This project provides a scalable, centralized system for forwarding calls from main Twilio numbers to various office locations, departments, or teams. It includes a dynamic "whisper message" that announces the call's context to the staff member before connecting the call.
+This project provides a scalable, centralized system for forwarding calls from main Twilio numbers to various office locations or departments. It includes a dynamic "whisper message" that announces the lead source to the office staff before connecting the call.
 
-The core benefit of this architecture is that adding, removing, or updating office phone numbers is done by editing a single data file and redeploying the service, requiring **no changes** to the Studio Flow logic.
+The core benefit of this architecture is that all routing logic and configuration is centralized. Adding or updating office phone numbers is done by editing a single data file, and the whisper message is managed in one place.
 
 ---
 
 ## Architecture Overview
 
-This system uses a combination of Twilio products to create a flexible and maintainable call routing engine.
+This system uses a combination of Twilio products to create a flexible call routing engine.
 
-1.  **Twilio Studio Flow:** A single, universal flow acts as the entry point for all incoming calls. Its only job is to trigger the Twilio Function.
-2.  **Twilio Service (Functions & Assets):** A serverless service that bundles two key components:
-    * **The Function:** A Node.js function containing the core routing logic.
+1.  **Twilio Studio Flow:** A single, universal flow acts as the entry point. Its only job is to trigger the Twilio Function.
+2.  **Twilio Service (Functions & Assets):** A serverless service that bundles the core components:
+    * **The Function:** A Node.js function that reads the office data file, finds the correct destination, and generates TwiML instructions.
     * **The Asset:** A private JSON file (`office_data.json`) that acts as a directory, mapping Twilio numbers to their destinations.
-
-The workflow is as follows:
-**Incoming Call** → **Studio Flow** → **Run Function** → **Read Private JSON Asset (within the same service)** → **Generate TwiML** → **Forward Call with Whisper**
+    * **Environment Variables:** Securely stores configuration data, like the URL for the whisper message TwiML Bin.
+3.  **TwiML Bin:** Hosts the specific TwiML code for the whisper message that is played to your staff.
 
 ---
 
@@ -26,9 +25,9 @@ Follow these steps to set up the entire system in your Twilio account.
 
 ### Step 1: Prepare Your Office Data File
 
-First, create the JSON file on your local computer that will serve as your routing directory.
+This JSON file is the source of truth for your call routing.
 
-1.  Create a file named `office_data.json`.
+1.  Create a file named `office_data.json` on your local computer.
 2.  Add your office data using the main Twilio number (in E.164 format) as the key.
 
     ```json
@@ -39,33 +38,59 @@ First, create the JSON file on your local computer that will serve as your routi
       },
       "+19803002222": {
         "destination": "+19808675309",
-        "officeName": "Sales Department"
+        "officeName": "The Sales Department"
       }
     }
     ```
 
-### Step 2: Create and Deploy the Twilio Service
+### Step 2: Create the Whisper Message TwiML Bin
 
-Next, create the serverless service that will contain both your data file (Asset) and your logic (Function).
+This hosts the message your staff will hear.
+
+1.  In your Twilio Console, go to **Developer tools** > **TwiML Bins**.
+2.  Click **Create new TwiML Bin**.
+3.  Give it a **FRIENDLY NAME**, like `whisper-handler`.
+4.  In the **TWIML** box, paste your specific whisper message code:
+
+    ```xml
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+      <Say voice="Google.en-US-Chirp3-HD-Kore" language="en-US">
+        This is a new lead for {{officeName}}. Your call will be connected in 3...2...1...
+      </Say>
+    </Response>
+    ```
+    *Note: The variable has been updated to `{{officeName}}` to match what our function will send.*
+
+5.  Click **Create**.
+6.  After the page reloads, **copy the URL** of this TwiML Bin. You will need it in the next step.
+
+### Step 3: Create and Configure the Twilio Service
+
+This service bundles your logic, data, and configuration.
 
 1.  In your Twilio Console, navigate to **Developer tools** > **Functions and Webhooks**.
 2.  Click **Create service**. Name the service `office-forwarding` and click **Next**.
-3.  Inside your new service, click the **Add +** button and select **Upload File**.
-    * Choose the `office_data.json` file you just created.
-    * The file will be uploaded as a **Private** asset, which is correct.
-4.  Click the **Add +** button again and select **Add Function**.
-    * Name the new function path `/forwarder`.
-5.  Replace all the code in the function with the following:
+3.  **Add Environment Variable:**
+    * In the left sidebar of your new service, click **Settings** > **Environment Variables**.
+    * Click **Add** and create a new variable:
+        * **KEY:** `WHISPER_TWIML_BIN_URL`
+        * **VALUE:** Paste the TwiML Bin URL you copied in Step 2.
+    * Click **Save**.
+4.  **Upload Data File:**
+    * In the left sidebar, click **Assets**.
+    * Click the **Add +** button and select **Upload File**.
+    * Choose the `office_data.json` file you created in Step 1.
+5.  **Add the Function:**
+    * Click the **Add +** button again and select **Add Function**.
+    * Name the function path `/forwarder`.
+    * Replace all the code in the function with the following:
 
     ```javascript
-    // functions/forwarder.js
-    
     exports.handler = async function(context, event, callback) {
-      const twiml = new Twilio.Response();
+      const twiml = new Twilio.twiml.VoiceResponse();
       const calledNumber = event.calledNumber;
       const caller = event.caller;
-    
-      // This path corresponds to the private asset uploaded to this Service.
       const assetPath = '/office_data.json'; 
       
       try {
@@ -75,30 +100,27 @@ Next, create the serverless service that will contain both your data file (Asset
     
         if (office) {
           const dial = twiml.dial({ callerId: caller });
-          const whisperUrl = `https://handler.twilio.com/twiml/EHbb1005a76e7f8e8331a1985222b7d413?Message=This+is+a+call+for+${encodeURIComponent(office.officeName)}`;
+          const whisperBinUrl = context.WHISPER_TWIML_BIN_URL;
+          const whisperUrl = `${whisperBinUrl}?officeName=${encodeURIComponent(office.officeName)}`;
           dial.number({ url: whisperUrl }, office.destination);
         } else {
-          console.error(`No match found for ${calledNumber} in the JSON file.`);
-          twiml.say('We\'re sorry, the number you have dialed is not in service.');
+          twiml.say({ voice: 'Polly.Joanna' }, 'We\'re sorry, the number you have dialed is not in service.');
           twiml.hangup();
         }
       } catch (error) {
         console.error(`Error processing request: ${error}`);
-        twiml.say('We are sorry, an internal error has occurred.');
+        twiml.say({ voice: 'Polly.Joanna' }, 'We are sorry, an internal error has occurred.');
         twiml.hangup();
       }
     
       return callback(null, twiml);
     };
     ```
+6.  **Deploy:** Click the **Deploy All** button at the bottom of the screen.
 
-6.  Click the **Deploy All** button at the bottom of the screen. Wait for the deployment to complete.
+### Step 4: Import and Configure the Studio Flow
 
-### Step 3: Import and Configure the Studio Flow
-
-The final step is to set up the simple flow that triggers your service.
-
-1.  In your Twilio Console, navigate to **Studio** and create a new flow named **Universal Office Forwarder**. Start by selecting the **Import from JSON** option.
+1.  In your Twilio Console, navigate to **Studio** and create a new flow named **Universal Office Forwarder**, selecting **Import from JSON**.
 2.  Paste the following JSON into the text box:
 
     ```json
@@ -111,10 +133,10 @@ The final step is to set up the simple flow that triggers your service.
     }
     ```
 3.  After importing, click the **Run_Forwarder_Function** widget.
-4.  In the configuration panel, use the dropdowns to select your `office-forwarding` **Service** and `/forwarder` **Function**. The **Environment** will default to the service's domain and does not need to be changed.
+4.  In the configuration panel, select your `office-forwarding` **Service** and `/forwarder` **Function**.
 5.  **Publish** the flow.
 
-### Step 4: Final Configuration
+### Step 5: Final Configuration
 
 1.  Navigate to **Phone Numbers** in your console.
 2.  For each main number you use, configure **A CALL COMES IN** to use **Studio Flow** and select your **Universal Office Forwarder** flow.
@@ -123,7 +145,5 @@ The final step is to set up the simple flow that triggers your service.
 
 ## Maintenance
 
-To add, update, or remove an office:
-1.  Edit the `office_data.json` file on your local computer.
-2.  In your `office-forwarding` service in the Twilio Console, delete the old asset and upload the new version.
-3.  Click **Deploy All** to make the changes live.
+* **To add or change an office number:** Edit your local `office_data.json` file, then re-upload it to your Twilio Service Assets (replacing the old one) and click **Deploy All**.
+* **To change the whisper message:** Edit the `whisper-handler` TwiML Bin and click **Save**.

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Chirp3-HD-Kore" language="en-US">
+    This is a new lead for REPLACE_WITH_YOUR_COMPANY_NAME_HERE. Your call will be connected in 3...2...1...
+  </Say>
+</Response>
