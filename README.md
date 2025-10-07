@@ -13,7 +13,7 @@ This system uses a combination of Twilio products to create a flexible and resil
 1.  **Twilio Studio Flow:** A single, universal flow acts as the entry point. Its only job is to trigger the main Twilio Function.
 2.  **Twilio Service (Functions & Assets):** A serverless service that bundles the core components:
     * **Functions:** Three distinct Node.js functions handle the call logic:
-        * `/forwarder`: The main function that looks up the office and attempts to connect the call.
+        * `/forwarder`: The main function that looks up the office, records the call, and attempts to connect it.
         * `/voicemail`: A fallback function that plays a greeting and records a message if the office doesn't answer.
         * `/send-sms`: A background function that sends an SMS with the recording link after a voicemail is left.
     * **The Asset:** A private JSON file (`office_data.json`) that acts as a directory, mapping Twilio numbers to their destinations.
@@ -103,7 +103,8 @@ This service bundles your logic, data, and configuration.
             if (office) {
               const dial = twiml.dial({
                 callerId: caller,
-                action: `/voicemail?smsTarget=${encodeURIComponent(office.destination)}`
+                action: `/voicemail?smsTarget=${encodeURIComponent(office.destination)}`,
+                record: 'record-from-answer-dual'
               });
               const whisperBinUrl = context.WHISPER_TWIML_BIN_URL;
               const whisperUrl = `${whisperBinUrl}?officeName=${encodeURIComponent(office.officeName)}`;
@@ -199,3 +200,75 @@ This service bundles your logic, data, and configuration.
 * **To change the whisper message:** Edit the `whisper-handler` TwiML Bin and click **Save**.
 * **To change the voicemail greeting:** Edit the code in the `/voicemail` function and click **Deploy All**.
 * **To change the SMS notification text:** Edit the code in the `/send-sms` function and click **Deploy All**.
+
+---
+
+## Testing the System
+
+You can simulate an incoming customer call using the Twilio REST API and a `curl` command. This allows you to test the entire flow using just one phone, which will act as the "office."
+
+### Step 1: Preparation
+
+Before running a test, make sure you have the following ready.
+
+**A. Gather Your Credentials & Numbers**
+You will need:
+* **Account SID:** Found on your [Twilio Console Dashboard](https://twilio.com/console).
+* **Auth Token:** Also on the dashboard (click "Show").
+* **A `From` Number:** Any Twilio number you own. The API will use this as the Caller ID.
+* **The `To` Number:** The specific Twilio marketing number you want to test.
+
+**B. Prepare Your `office_data.json` File**
+Ensure the number you're testing is configured to forward to your personal mobile phone for the duration of the test.
+1.  Open your `office_data.json` file.
+2.  Find the entry for the number you are testing and set its `destination` to your mobile number in E.164 format.
+    ```json
+    {
+      "+19786259195": {
+        "destination": "+1YOUR_MOBILE_NUMBER",
+        "officeName": "API Test"
+      }
+    }
+    ```
+3.  Upload the updated file to your `office-forwarding` service and click **Deploy All**.
+
+**C. Create the Test Caller TwiML Bin**
+This TwiML Bin provides the initial instructions for the API call. Its only job is to start the call and wait, acting as the automated "customer."
+1.  In your Twilio Console, go to **Developer tools** > **TwiML Bins**.
+2.  Click **Create new TwiML Bin** and name it `api-test-caller`.
+3.  Paste the following TwiML and click **Create**:
+    ```xml
+    <Response>
+        <Say>Starting test call. Please wait.</Say>
+        <Pause length="30"/>
+    </Response>
+    ```
+4.  After the page reloads, **copy the URL** of this new TwiML Bin.
+
+### Step 2: Running the Test
+
+Open your computer's terminal and use the following `curl` command. Replace all the placeholder values with your actual information.
+
+```bash
+curl -X POST [https://api.twilio.com/2010-04-01/Accounts/ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/Calls.json](https://api.twilio.com/2010-04-01/Accounts/ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/Calls.json) \
+--data-urlencode "From=+1TWILIO_FROM_NUMBER" \
+--data-urlencode "To=+1TWILIO_NUMBER_TO_TEST" \
+--data-urlencode "Url=YOUR_TEST_TWIML_BIN_URL" \
+-u "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx":"your_auth_token"
+```
+
+**Placeholder Guide:**
+
+- `ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`: Your Account SID (used in two places).
+- `your_auth_token`: Your Auth Token.
+- `+1TWILIO_FROM_NUMBER`: The Twilio number the call will come from.
+- `+1TWILIO_NUMBER_TO_TEST`: The marketing number you are testing.
+- `YOUR_TEST_TWIML_BIN_URL`: The URL of the api-test-caller TwiML Bin you just created.
+
+**Test Case A: Office Answers (Testing Whisper & Recording)**
+1. **Action:** Run the `curl` command. When your mobile phone rings, answer it.
+2. **Expected Result:** You should immediately hear the whisper message ("This is a new lead for API Test..."). After the whisper, the call will connect to silence. Hearing the whisper is the sign of success. The call will also be recorded.
+
+**Test Case B: Office Doesn't Answer (Testing Voicemail & SMS)**
+1. **Action:** Run the `curl` command. When your mobile phone rings, press the 'Decline' button.
+2. **Expected Result:** The call will stop ringing. A minute or so later, you should receive an SMS notification with the link to the new voicemail recording. Receiving the SMS is the sign of success.

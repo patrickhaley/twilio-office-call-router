@@ -8,5 +8,7 @@
     Hey Patrick — this is a Twilio system test call, just checking your setup.
     Peter Piper picked a peck of pickled peppers... and deployed them to production.
     If you're hearing this, everything’s running smoothly.
+    Good bye.
   </Say>
+  <Play digits="9"/>
 </Response>
