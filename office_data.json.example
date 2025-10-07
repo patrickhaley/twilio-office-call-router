@@ -1,0 +1,14 @@
+{
+    "+17042001111": {
+      "destination": "+17045551212",
+      "officeName": "Charlotte Office"
+    },
+    "+19803002222": {
+      "destination": "+19808675309",
+      "officeName": "Sales Department"
+    },
+    "+18005550199": {
+      "destination": "+13365550100",
+      "officeName": "Support Team"
+    }
+}
