@@ -1,0 +1,39 @@
+graph TD
+    %% --- Subgraphs for Organization ---
+    subgraph Customer Interaction
+        C[Customer calls Twilio Number] --> A(Twilio Number forwards to Studio Flow)
+    end
+
+    subgraph Twilio Studio & Forwarder Function
+        A --> B{Studio Flow: Run Function Widget}
+        B --> F_START[Forwarder Function Start]
+        F_START -- Context (calledNumber, caller) --> F_LOOKUP{Look up in office_data.json}
+
+        F_LOOKUP -- Match Found --> F_DIAL_OFFICE[Forwarder: Dial Office with Whisper TwiML]
+        F_LOOKUP -- No Match --> F_NOMATCH_ERROR[Forwarder: Say Not in service and Hangup]
+
+        F_DIAL_OFFICE -- Whisper Played (Office Answers) --> F_DIAL_SUCCESS{Call Connected}
+        F_DIAL_OFFICE -- No Answer/Busy (Office Doesn't Answer) --> V_START[Voicemail Function Start]
+    end
+
+    subgraph Office Answers Scenario
+        F_DIAL_SUCCESS --> OFFICE_ANS[Office Answers Call]
+        OFFICE_ANS --> WHISPER[TwiML Bin: Play Whisper Message]
+        WHISPER --> CUST_CONN[Customer and Office Connected]
+        CUST_CONN --> HANGUP_NORMAL[Call Ends]
+    end
+
+    subgraph Voicemail & SMS Notification Scenario
+        V_START -- Context (smsTarget=office.destination) --> V_GREETING[Voicemail: Say Leave a message]
+        V_GREETING --> V_RECORD[Voicemail: Record Caller's Message]
+        V_RECORD --> SMS_START[Send SMS Function Start]
+
+        SMS_START -- Context (RecordingUrl, smsTarget, CallFrom) --> SMS_CREATE[Send SMS Create to smsTarget from Twilio Number with body New VM: RecordingUrl]
+        SMS_CREATE --> SMS_SENT[SMS Sent to Office Destination]
+        SMS_START --> HANGUP_VM[Call Ends]
+    end
+
+    %% --- Connections between Subgraphs ---
+    F_DIAL_SUCCESS --> OFFICE_ANS
+    V_START --> V_GREETING
+    V_RECORD --> SMS_START
