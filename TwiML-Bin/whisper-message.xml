@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Chirp3-HD-Kore" language="en-US">
+    This is an incoming call for REPLACE_WITH_YOUR_COMPANY_NAME_HERE. Your call will be connected after the tone in 3...2...1...
+  </Say>
+  <Play digits="9"/>
+</Response>
